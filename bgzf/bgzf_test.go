@@ -1202,6 +1202,35 @@ func TestWriteByteCount(t *testing.T) {
 	}
 }
 
+func TestSeekCacheBug(t *testing.T) {
+	fh, err := os.Open("testdata/dbscSNV_sample.gz")
+	if err != nil {
+		t.Fatalf("Open() error:%v", err)
+	}
+	rd, err := NewReader(fh, 2)
+	if err != nil {
+		t.Fatalf("NewReader() error:%v", err)
+	}
+	rd.SetCache(cache.NewLRU(32))
+	buf := make([]byte, 2)
+	time.Sleep(100 * time.Millisecond)
+	off := Offset{File: 9395, Block: 0}
+	err = rd.Seek(off)
+	if err != nil {
+		t.Fatalf("Seek() error:%v", err)
+	}
+	_, err = rd.Read(buf)
+	if err != nil {
+		t.Fatalf("Read() error:%v", err)
+	}
+	if !bytes.Equal(buf, []byte{'O', 'X'}) {
+		t.Errorf("Expected 'OX', got '%s'", buf)
+	}
+	if rd.LastChunk().Begin != off {
+		t.Errorf("Incorrect position: expected %+v, got %+v", off, rd.LastChunk().Begin)
+	}
+}
+
 func BenchmarkWrite(b *testing.B) {
 	bg := NewWriter(ioutil.Discard, *conc)
 	block := bytes.Repeat([]byte("repeated"), 50)

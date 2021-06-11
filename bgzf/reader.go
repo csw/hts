@@ -462,24 +462,32 @@ func (bg *Reader) Seek(off Offset) error {
 					blk, err := dec.wait()
 					if err == nil {
 						bg.keep(blk)
+						if blk.Base() == off.File {
+							// this decompressor had the block we wanted
+							bg.waiting <- dec
+							bg.current = blk
+							dec = nil
+						}
 					}
 				}
 			}
-			bg.current, bg.err = dec.
-				using(bg.current).
-				nextBlockAt(off.File, rs).
-				wait()
-			if bg.dec == nil {
-				select {
-				case <-bg.control:
-				default:
+			if dec != nil {
+				bg.current, bg.err = dec.
+					using(bg.current).
+					nextBlockAt(off.File, rs).
+					wait()
+				if bg.dec == nil {
+					select {
+					case <-bg.control:
+					default:
+					}
+					bg.control <- bg.current.NextBase()
+					bg.waiting <- dec
 				}
-				bg.control <- bg.current.NextBase()
-				bg.waiting <- dec
-			}
-			bg.Header = bg.current.header()
-			if bg.err != nil {
-				return bg.err
+				bg.Header = bg.current.header()
+				if bg.err != nil {
+					return bg.err
+				}
 			}
 		}
 	}
